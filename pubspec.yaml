@@ -1,0 +1,45 @@
+name: esp01_controller
+description: ESP-01 WiFi Provisioning ve Röle Kontrolü
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # WiFi tarama
+  wifi_scan: ^0.4.1
+
+  # İzin yönetimi (WiFi için Konum izni gerekli)
+  permission_handler: ^11.3.0
+
+  # Mevcut WiFi SSID'sini okuma
+  network_info_plus: ^6.0.1
+
+  # WiFi ayarlarını açmak için
+  url_launcher: ^6.3.0
+
+  # HTTP istekleri
+  http: ^1.2.0
+
+  # Yerel depolama (son bağlanan IP)
+  shared_preferences: ^2.2.2
+
+  # UI
+  cupertino_icons: ^1.0.6
+  # Firebase için
+  firebase_core: ^3.0.0
+  firebase_database: ^11.0.0
+  firebase_auth: ^5.0.0 
+  google_sign_in: ^6.2.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
