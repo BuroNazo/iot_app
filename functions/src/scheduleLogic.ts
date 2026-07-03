@@ -38,12 +38,16 @@ export function evaluateSchedule(
   }
 
   if (schedule.type === "time") {
-    const matchesTime =
-      schedule.hour === now.hour && schedule.minute === now.minute;
+    // Bir cron çalıştırması her dakika garanti değildir (ör. GitHub Actions
+    // dakikalarca/saatlerce gecikebilir), bu yüzden tam dakika eşleşmesi
+    // yerine "zamanı geçti mi, bugün henüz tetiklenmedi mi" kontrolü yapılır.
+    const scheduledMinutes = schedule.hour * 60 + schedule.minute;
+    const nowMinutes = now.hour * 60 + now.minute;
+    const timeHasPassed = nowMinutes >= scheduledMinutes;
     const matchesDay = schedule.days.includes(now.dayOfWeek);
     const alreadyTriggeredToday = schedule.lastTriggeredDate === now.dateStr;
 
-    if (matchesTime && matchesDay && !alreadyTriggeredToday) {
+    if (timeHasPassed && matchesDay && !alreadyTriggeredToday) {
       return {
         shouldTrigger: true,
         scheduleUpdates: { lastTriggeredDate: now.dateStr },

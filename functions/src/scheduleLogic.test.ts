@@ -30,9 +30,17 @@ describe("evaluateSchedule - time type", () => {
     expect(result.scheduleUpdates).toEqual({ lastTriggeredDate: "2026-07-02" });
   });
 
-  test("does not trigger when minute does not match", () => {
-    const result = evaluateSchedule(base, now({ minute: 31 }));
+  test("does not trigger when current time is before the scheduled time", () => {
+    const result = evaluateSchedule(base, now({ minute: 29 }));
     expect(result.shouldTrigger).toBe(false);
+  });
+
+  test("triggers (catch-up) when current time is after the scheduled time and not already triggered today", () => {
+    // GitHub Actions cron does not run every minute reliably, so a check
+    // that happens well after the scheduled minute must still fire once.
+    const result = evaluateSchedule(base, now({ hour: 23, minute: 45 }));
+    expect(result.shouldTrigger).toBe(true);
+    expect(result.scheduleUpdates).toEqual({ lastTriggeredDate: "2026-07-02" });
   });
 
   test("does not trigger when day is not in days list", () => {
