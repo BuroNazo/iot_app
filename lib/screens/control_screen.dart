@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../services/esp_service.dart';
-import '../models/schedule.dart';
-import '../services/schedule_service.dart';
-import '../widgets/schedule_sheet.dart';
 
 class ControlScreen extends StatefulWidget {
   const ControlScreen({super.key});
@@ -16,7 +13,6 @@ class ControlScreen extends StatefulWidget {
 class _ControlScreenState extends State<ControlScreen>
     with SingleTickerProviderStateMixin {
   final EspService _espService = EspService();
-  final ScheduleService _scheduleService = ScheduleService();
   bool _relayStatus = false;
   bool _isOnline = false;
   bool _isLoading = false;
@@ -108,18 +104,6 @@ class _ControlScreenState extends State<ControlScreen>
           ),
         ],
       ),
-    );
-  }
-
-  void _showAddScheduleSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF0D1117),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => ScheduleSheet(deviceId: _deviceId),
     );
   }
 
@@ -434,64 +418,6 @@ class _ControlScreenState extends State<ControlScreen>
 
                 const SizedBox(height: 16),
 
-                // Zamanlama
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            "Zamanlama",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: _showAddScheduleSheet,
-                            icon: const Icon(Icons.add_circle_rounded,
-                                color: _neonCyan),
-                          ),
-                        ],
-                      ),
-                      StreamBuilder<List<Schedule>>(
-                        stream: _scheduleService.schedulesStream(_deviceId),
-                        builder: (context, snapshot) {
-                          final schedules = snapshot.data ?? [];
-                          if (schedules.isEmpty) {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Text(
-                                "Henuz zamanlama yok",
-                                style: TextStyle(
-                                    color: Colors.white38, fontSize: 13),
-                              ),
-                            );
-                          }
-                          return Column(
-                            children: schedules
-                                .map((s) => _ScheduleRow(
-                                      schedule: s,
-                                      onEnabledChanged: (value) =>
-                                          _scheduleService.setEnabled(
-                                              _deviceId, s.id, value),
-                                      onDelete: () => _scheduleService
-                                          .deleteSchedule(_deviceId, s.id),
-                                    ))
-                                .toList(),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
                 // Online göstergesi
                 Container(
                   padding:
@@ -654,59 +580,6 @@ class _NavItem extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ScheduleRow extends StatelessWidget {
-  final Schedule schedule;
-  final ValueChanged<bool> onEnabledChanged;
-  final VoidCallback onDelete;
-
-  const _ScheduleRow({
-    required this.schedule,
-    required this.onEnabledChanged,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D1117),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            schedule.type == ScheduleType.time
-                ? Icons.schedule_rounded
-                : Icons.timer_rounded,
-            color: Colors.white38,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              schedule.summary,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-          ),
-          Switch(
-            value: schedule.enabled,
-            activeColor: const Color(0xFF00F5FF),
-            onChanged: onEnabledChanged,
-          ),
-          IconButton(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded,
-                color: Colors.redAccent, size: 20),
-          ),
-        ],
       ),
     );
   }
