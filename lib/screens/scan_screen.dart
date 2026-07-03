@@ -275,7 +275,7 @@ class _ScanScreenState extends State<ScanScreen>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF1A2744), Color(0xFF0D1117)],
+                          colors: [AppTheme.bgTop, AppTheme.bgMid],
                         ),
                         border: Border.all(
                             color: AppTheme.accentStart.withValues(alpha: 0.4),

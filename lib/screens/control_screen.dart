@@ -122,8 +122,10 @@ class _ControlScreenState extends State<ControlScreen>
   Widget build(BuildContext context) {
     final device = _device;
     final isOn = device?.state == 'ON';
-    final isPending = device != null && device.command != device.state;
     final online = device?.isOnline ?? false;
+    // Cihaz cevrimdisiyken komut asla uygulanmayacagi icin "bekliyor"
+    // durumuna girme — aksi halde dugme sonsuz spinner'da kilitlenir.
+    final isPending = online && device != null && device.command != device.state;
 
     return Scaffold(
       backgroundColor: AppTheme.bgBottom,

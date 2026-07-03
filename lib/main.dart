@@ -7,6 +7,7 @@ import 'screens/scan_screen.dart';
 import 'screens/provision_screen.dart';
 import 'screens/control_screen.dart';
 import 'screens/home_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,12 +27,12 @@ class Esp01App extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF060A0F),
-        primaryColor: const Color(0xFF00F5FF),
+        scaffoldBackgroundColor: AppTheme.bgBottom,
+        primaryColor: AppTheme.accentStart,
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF00F5FF),
-          secondary: Color(0xFF7C3AED),
-          surface: Color(0xFF0D1117),
+          primary: AppTheme.accentStart,
+          secondary: AppTheme.accentEnd,
+          surface: AppTheme.bgMid,
           onSurface: Colors.white,
         ),
         useMaterial3: true,
@@ -59,9 +60,9 @@ class AuthWrapper extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            backgroundColor: Color(0xFF060A0F),
+            backgroundColor: AppTheme.bgBottom,
             body: Center(
-              child: CircularProgressIndicator(color: Color(0xFF00F5FF)),
+              child: CircularProgressIndicator(color: AppTheme.accentStart),
             ),
           );
         }
