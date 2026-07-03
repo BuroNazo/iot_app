@@ -48,6 +48,8 @@
 ESP8266WebServer server(80);
 bool relayState    = false;
 unsigned long lastPoll = 0;
+unsigned long lastHeartbeat = 0;
+#define HEARTBEAT_INTERVAL 30000
 String deviceId    = "";
 String deviceName  = "ESP Cihaz";
 String firebaseUid = "";
@@ -122,7 +124,8 @@ void firebaseRegisterDevice() {
   http.setTimeout(8000);
 
   String body = "{\"name\":\"" + deviceName +
-                "\",\"command\":\"OFF\",\"state\":\"OFF\",\"lastSeen\":0}";
+                "\",\"command\":\"OFF\",\"state\":\"OFF\","
+                "\"lastSeen\":{\".sv\":\"timestamp\"}}";
   int code = http.PATCH(body);
   Serial.println("Firebase kayit kodu: " + String(code));
   Serial.println("Firebase path: " + getFirebasePath());
@@ -170,8 +173,26 @@ void firebaseSetState(const String& state) {
   http.setTimeout(8000);
 
   String body = "{\"state\":\"" + state +
-                "\",\"lastSeen\":" + String(millis()) + "}";
+                "\",\"lastSeen\":{\".sv\":\"timestamp\"}}";
   http.PATCH(body);
+  http.end();
+  delete client;
+}
+
+// ~30 saniyede bir "yasiyorum" sinyali: lastSeen'e Firebase sunucu
+// zamanini yazar. Uygulama bununla gercek cevrimici durumu gosterir.
+void firebaseHeartbeat() {
+  if (firebaseUid.isEmpty()) return;
+
+  BearSSL::WiFiClientSecure* client = createSecureClient();
+  HTTPClient http;
+  String url = "https://" + String(FIREBASE_HOST) +
+               getFirebasePath() + ".json";
+
+  http.begin(*client, url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(8000);
+  http.PATCH("{\"lastSeen\":{\".sv\":\"timestamp\"}}");
   http.end();
   delete client;
 }
@@ -182,6 +203,11 @@ void pollFirebase() {
   if (firebaseUid.isEmpty()) return;
   if (millis() - lastPoll < POLL_INTERVAL) return;
   lastPoll = millis();
+
+  if (millis() - lastHeartbeat >= HEARTBEAT_INTERVAL) {
+    lastHeartbeat = millis();
+    firebaseHeartbeat();
+  }
 
   String command = firebaseGetCommand();
   if (command.isEmpty()) return;
