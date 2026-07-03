@@ -1,7 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import '../models/device.dart';
 import '../services/esp_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/app_bottom_nav.dart';
+import '../widgets/aurora_background.dart';
+import '../widgets/glass_card.dart';
 
 class ControlScreen extends StatefulWidget {
   const ControlScreen({super.key});
@@ -13,16 +19,11 @@ class ControlScreen extends StatefulWidget {
 class _ControlScreenState extends State<ControlScreen>
     with SingleTickerProviderStateMixin {
   final EspService _espService = EspService();
-  bool _relayStatus = false;
-  bool _isOnline = false;
-  bool _isLoading = false;
-  String _deviceName = "Smart Switch";
-  String _deviceId = "";
+  Device? _device;
+  String _deviceId = '';
+  StreamSubscription<DatabaseEvent>? _deviceSub;
+  Timer? _refreshTimer;
   late AnimationController _glowController;
-
-  static const Color _neonCyan = Color(0xFF00F5FF);
-  static const Color _neonPurple = Color(0xFF7C3AED);
-  static const Color _darkBg = Color(0xFF060A0F);
 
   @override
   void initState() {
@@ -31,6 +32,9 @@ class _ControlScreenState extends State<ControlScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -47,49 +51,56 @@ class _ControlScreenState extends State<ControlScreen>
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    FirebaseDatabase.instance
-        .ref("users/$uid/devices/$_deviceId")
+    _deviceSub?.cancel();
+    _deviceSub = FirebaseDatabase.instance
+        .ref('users/$uid/devices/$_deviceId')
         .onValue
         .listen((event) {
-      if (!event.snapshot.exists) return;
+      if (!mounted || !event.snapshot.exists) return;
       final data = event.snapshot.value as Map<dynamic, dynamic>;
-      setState(() {
-        _relayStatus = data['state'] == 'ON';
-        _deviceName = data['name'] ?? 'Smart Switch';
-        _isOnline = true;
-      });
+      setState(() => _device = Device.fromMap(_deviceId, data));
     });
   }
 
-  Future<void> _toggleRelay() async {
-    setState(() => _isLoading = true);
-    await _espService.toggleRelay(_deviceId, !_relayStatus);
-    setState(() => _isLoading = false);
+  @override
+  void dispose() {
+    _deviceSub?.cancel();
+    _refreshTimer?.cancel();
+    _glowController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _togglePower() async {
+    final device = _device;
+    if (device == null) return;
+    await _espService.toggleRelay(_deviceId, device.state != 'ON');
   }
 
   void _showResetDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF111827),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title:
-            const Text("Cihazi Sifirla", style: TextStyle(color: Colors.white)),
+        backgroundColor: AppTheme.bgMid,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Cihazi Sifirla',
+            style: TextStyle(color: Colors.white)),
         content: const Text(
-          "ESP-01 WiFi bilgisini unutacak ve kurulum moduna donecek. Emin misiniz?",
-          style: TextStyle(color: Color(0xFF94A3B8)),
+          'ESP-01 WiFi bilgisini unutacak ve kurulum moduna donecek. Emin misiniz?',
+          style: TextStyle(color: AppTheme.textMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("Iptal", style: TextStyle(color: Colors.white38)),
+            child:
+                const Text('Iptal', style: TextStyle(color: Colors.white38)),
           ),
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text("Sifirlaniyor... Lutfen bekleyin."),
+                  content: Text('Sifirlaniyor... Lutfen bekleyin.'),
                   backgroundColor: Colors.orange,
                 ),
               );
@@ -99,8 +110,8 @@ class _ControlScreenState extends State<ControlScreen>
                     context, '/home', (_) => false);
               }
             },
-            child: const Text("Sifirla",
-                style: TextStyle(color: Colors.redAccent)),
+            child: const Text('Sifirla',
+                style: TextStyle(color: AppTheme.offline)),
           ),
         ],
       ),
@@ -108,478 +119,259 @@ class _ControlScreenState extends State<ControlScreen>
   }
 
   @override
-  void dispose() {
-    _glowController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final device = _device;
+    final isOn = device?.state == 'ON';
+    final isPending = device != null && device.command != device.state;
+    final online = device?.isOnline ?? false;
+
     return Scaffold(
-      backgroundColor: _darkBg,
-      body: Stack(
-        children: [
-          AnimatedBuilder(
-            animation: _glowController,
-            builder: (_, __) {
-              return Positioned(
-                top: 100,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    width: 300,
-                    height: 300,
+      backgroundColor: AppTheme.bgBottom,
+      body: AuroraBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back_ios_rounded,
+                          color: Colors.white60, size: 20),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'CIHAZ KONTROL',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                            letterSpacing: 2),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _showResetDialog,
+                      icon: const Icon(Icons.settings_rounded,
+                          color: Colors.white38, size: 22),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                device?.name ?? 'Yukleniyor...',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (_relayStatus ? _neonCyan : Colors.white12)
-                              .withOpacity(0.06 + _glowController.value * 0.04),
-                          blurRadius: 120,
-                          spreadRadius: 60,
-                        ),
-                      ],
+                      color: online ? AppTheme.online : AppTheme.offline,
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.arrow_back_ios_rounded,
-                            color: Colors.white60, size: 20),
-                      ),
-                      const Expanded(
-                        child: Text(
-                          "Device Control",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              color: Colors.white60,
-                              fontSize: 14,
-                              letterSpacing: 1),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _showResetDialog,
-                        icon: const Icon(Icons.settings_rounded,
-                            color: Colors.white38, size: 22),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "Smart Switch",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  _deviceName,
-                  style: TextStyle(
-                    color: _neonCyan,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // Kontrol Kartı
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Container(
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0D1117),
-                      borderRadius: BorderRadius.circular(32),
-                      border: Border.all(
-                        color: _relayStatus
-                            ? _neonCyan.withOpacity(0.3)
-                            : Colors.white.withOpacity(0.06),
-                      ),
-                      boxShadow: _relayStatus
-                          ? [
-                              BoxShadow(
-                                color: _neonCyan.withOpacity(0.1),
-                                blurRadius: 40,
-                                spreadRadius: 10,
-                              )
-                            ]
-                          : [],
+                  const SizedBox(width: 6),
+                  Text(
+                    online
+                        ? 'Cevrimici'
+                        : 'Cevrimdisi · ${device?.lastSeenText ?? ''}',
+                    style: TextStyle(
+                      color: online ? AppTheme.online : AppTheme.offline,
+                      fontSize: 13,
                     ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text("Status: ",
-                                style: TextStyle(
-                                    color: Colors.white54, fontSize: 16)),
-                            Text(
-                              _relayStatus ? "ON" : "OFF",
-                              style: TextStyle(
-                                color:
-                                    _relayStatus ? _neonCyan : Colors.white38,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 32),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            // Ampul
-                            Column(
-                              children: [
-                                AnimatedBuilder(
-                                  animation: _glowController,
-                                  builder: (_, __) {
-                                    return Container(
-                                      width: 80,
-                                      height: 80,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: _relayStatus
-                                            ? _neonCyan.withOpacity(0.12 +
-                                                _glowController.value * 0.08)
-                                            : Colors.white.withOpacity(0.04),
-                                        border: Border.all(
-                                          color: _relayStatus
-                                              ? _neonCyan.withOpacity(0.3)
-                                              : Colors.white12,
-                                        ),
-                                        boxShadow: _relayStatus
-                                            ? [
-                                                BoxShadow(
-                                                  color: _neonCyan.withOpacity(
-                                                      0.3 +
-                                                          _glowController
-                                                                  .value *
-                                                              0.1),
-                                                  blurRadius: 30,
-                                                  spreadRadius: 4,
-                                                )
-                                              ]
-                                            : [],
-                                      ),
-                                      child: Icon(
-                                        _relayStatus
-                                            ? Icons.lightbulb_rounded
-                                            : Icons.lightbulb_outline_rounded,
-                                        color: _relayStatus
-                                            ? _neonCyan
-                                            : Colors.white24,
-                                        size: 40,
-                                      ),
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  _relayStatus ? "Glowing" : "Off",
-                                  style: TextStyle(
-                                    color: _relayStatus
-                                        ? _neonCyan
-                                        : Colors.white38,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 36),
 
-                            // Toggle
-                            Column(
-                              children: [
-                                GestureDetector(
-                                  onTap: _isLoading ? null : _toggleRelay,
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    width: 80,
-                                    height: 48,
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(30),
-                                      gradient: _relayStatus
-                                          ? const LinearGradient(colors: [
-                                              Color(0xFF5B21B6),
-                                              Color(0xFF7C3AED)
-                                            ])
-                                          : null,
-                                      color: _relayStatus
-                                          ? null
-                                          : const Color(0xFF1F2937),
-                                      boxShadow: _relayStatus
-                                          ? [
-                                              BoxShadow(
-                                                color: _neonPurple
-                                                    .withOpacity(0.4),
-                                                blurRadius: 16,
-                                                offset: const Offset(0, 4),
-                                              )
-                                            ]
-                                          : [],
+              // Hero guc dugmesi
+              AnimatedBuilder(
+                animation: _glowController,
+                builder: (_, __) {
+                  final glow =
+                      isOn ? 0.25 + _glowController.value * 0.15 : 0.0;
+                  return GestureDetector(
+                    onTap: isPending ? null : _togglePower,
+                    child: Container(
+                      width: 170,
+                      height: 170,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.glassFillSubtle,
+                        border: Border.all(
+                          color: isOn
+                              ? AppTheme.accentStart.withValues(alpha: 0.6)
+                              : AppTheme.glassBorder,
+                          width: 1.5,
+                        ),
+                        boxShadow: isOn
+                            ? [
+                                BoxShadow(
+                                  color: AppTheme.accentStart
+                                      .withValues(alpha: glow),
+                                  blurRadius: 50,
+                                  spreadRadius: 8,
+                                ),
+                              ]
+                            : [],
+                      ),
+                      child: Center(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          width: 126,
+                          height: 126,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient:
+                                isOn ? AppTheme.accentGradient : null,
+                            color: isOn ? null : AppTheme.glassFill,
+                            boxShadow: isOn
+                                ? [
+                                    BoxShadow(
+                                      color: AppTheme.accentStart
+                                          .withValues(alpha: 0.4),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 8),
                                     ),
-                                    child: AnimatedAlign(
-                                      duration:
-                                          const Duration(milliseconds: 300),
-                                      alignment: _relayStatus
-                                          ? Alignment.centerRight
-                                          : Alignment.centerLeft,
-                                      child: Container(
-                                        width: 38,
-                                        height: 38,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: _relayStatus
+                                  ]
+                                : [],
+                          ),
+                          child: Center(
+                            child: isPending
+                                ? const SizedBox(
+                                    width: 36,
+                                    height: 36,
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 3),
+                                  )
+                                : Column(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.power_settings_new_rounded,
+                                        color: isOn
+                                            ? Colors.white
+                                            : AppTheme.textMuted,
+                                        size: 44,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        isOn ? 'ACIK' : 'KAPALI',
+                                        style: TextStyle(
+                                          color: isOn
                                               ? Colors.white
-                                              : Colors.white38,
+                                              : AppTheme.textMuted,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1.5,
                                         ),
-                                        child: _isLoading
-                                            ? const Padding(
-                                                padding: EdgeInsets.all(10),
-                                                child:
-                                                    CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: Colors.purple),
-                                              )
-                                            : null,
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  _relayStatus
-                                      ? "Relay Activated"
-                                      : "Relay Off",
-                                  style: TextStyle(
-                                    color: _relayStatus
-                                        ? _neonPurple
-                                        : Colors.white38,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Cihaz Bilgisi
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0D1117),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.06)),
-                    ),
-                    child: Column(
-                      children: [
-                        _InfoRow(label: "Device", value: _deviceName),
-                        const SizedBox(height: 12),
-                        _InfoRow(
-                          label: "ID",
-                          value: _deviceId.length >= 8
-                              ? _deviceId.substring(0, 8)
-                              : _deviceId,
-                        ),
-                        const SizedBox(height: 12),
-                        _InfoRow(
-                          label: "Signal",
-                          value: _isOnline ? "Strong" : "Offline",
-                          valueColor:
-                              _isOnline ? Colors.greenAccent : Colors.redAccent,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Online göstergesi
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: _isOnline
-                        ? Colors.greenAccent.withOpacity(0.1)
-                        : Colors.redAccent.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: _isOnline
-                          ? Colors.greenAccent.withOpacity(0.4)
-                          : Colors.redAccent.withOpacity(0.4),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color:
-                              _isOnline ? Colors.greenAccent : Colors.redAccent,
-                          boxShadow: [
-                            BoxShadow(
-                              color: (_isOnline
-                                      ? Colors.greenAccent
-                                      : Colors.redAccent)
-                                  .withOpacity(0.6),
-                              blurRadius: 6,
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _isOnline ? "ONLINE" : "OFFLINE",
-                        style: TextStyle(
-                          color:
-                              _isOnline ? Colors.greenAccent : Colors.redAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // Durum hapi
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                decoration: BoxDecoration(
+                  color: (isOn ? AppTheme.online : AppTheme.textMuted)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: (isOn ? AppTheme.online : AppTheme.textMuted)
+                        .withValues(alpha: 0.35),
                   ),
                 ),
-                const Spacer(),
-              ],
-            ),
+                child: Text(
+                  isPending
+                      ? 'KOMUT GONDERILDI...'
+                      : (isOn ? 'ROLE AKTIF' : 'ROLE KAPALI'),
+                  style: TextStyle(
+                    color: isOn ? AppTheme.online : AppTheme.textMuted,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              const Spacer(),
+
+              // Bilgi cipleri
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _InfoChip(
+                        label: 'Cihaz ID',
+                        value: _deviceId.length >= 8
+                            ? _deviceId.substring(0, 8)
+                            : _deviceId,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _InfoChip(
+                        label: 'Son gorulme',
+                        value: device?.lastSeenText ?? '—',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
           ),
-        ],
+        ),
       ),
-      bottomNavigationBar: _BottomNav(currentIndex: 1),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 1),
     );
   }
 }
 
-class _InfoRow extends StatelessWidget {
+class _InfoChip extends StatelessWidget {
   final String label;
   final String value;
-  final Color? valueColor;
 
-  const _InfoRow({required this.label, required this.value, this.valueColor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: const TextStyle(color: Colors.white38, fontSize: 14)),
-        Text(
-          value,
-          style: TextStyle(
-            color: valueColor ?? Colors.white70,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BottomNav extends StatelessWidget {
-  final int currentIndex;
-  const _BottomNav({required this.currentIndex});
+  const _InfoChip({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 72,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D1117),
-        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.06))),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      borderRadius: 14,
+      child: Column(
         children: [
-          _NavItem(
-            icon: Icons.wifi_find_rounded,
-            label: "Scan",
-            selected: currentIndex == 0,
-            onTap: () => Navigator.pushReplacementNamed(context, '/scan'),
-          ),
-          _NavItem(
-            icon: Icons.home_rounded,
-            label: "Home",
-            selected: currentIndex == 1,
-            onTap: () => Navigator.pushReplacementNamed(context, '/home'),
-          ),
-          _NavItem(
-            icon: Icons.settings_rounded,
-            label: "Settings",
-            selected: currentIndex == 2,
-            onTap: () => Navigator.pushReplacementNamed(context, '/home'),
-          ),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 3),
+          Text(label,
+              style:
+                  const TextStyle(color: AppTheme.textMuted, fontSize: 10)),
         ],
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const neonCyan = Color(0xFF00F5FF);
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 80,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: selected ? neonCyan : Colors.white24, size: 22),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? neonCyan : Colors.white24,
-                fontSize: 10,
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
