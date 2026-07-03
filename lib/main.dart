@@ -7,14 +7,12 @@ import 'screens/scan_screen.dart';
 import 'screens/provision_screen.dart';
 import 'screens/control_screen.dart';
 import 'screens/home_screen.dart';
-import 'services/background_scheduler.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  await initializeBackgroundScheduler();
   runApp(const Esp01App());
 }
 

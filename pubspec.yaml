@@ -36,9 +36,6 @@ dependencies:
   firebase_database: ^11.0.0
   firebase_auth: ^5.0.0
   google_sign_in: ^6.2.0
-
-  # Arka planda zamanlama kontrolu icin
-  workmanager: ^0.9.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
